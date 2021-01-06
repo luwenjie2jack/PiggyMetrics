@@ -5,9 +5,7 @@
 
 # Piggy Metrics
 
-**A simple way to deal with personal finances**
-
-This is a [proof-of-concept application](http://my-piggymetrics.rhcloud.com), which demonstrates [Microservice Architecture Pattern](http://martinfowler.com/microservices/) using Spring Boot, Spring Cloud and Docker.
+This is a tutorial project, which demonstrates [Microservice Architecture Pattern](http://martinfowler.com/microservices/) using Spring Boot, Spring Cloud and Docker.
 With a pretty neat user interface, by the way.
 
 ![](https://cloud.githubusercontent.com/assets/6069066/13864234/442d6faa-ecb9-11e5-9929-34a9539acde0.png)
@@ -51,7 +49,7 @@ GET	| /notifications/settings/current	| Get current account notification setting
 PUT	| /notifications/settings/current	| Save current account notification settings	| × | ×
 
 #### Notes
-- Each microservice has it's own database, so there is no way to bypass API and access persistance data directly.
+- Each microservice has its own database, so there is no way to bypass API and access persistance data directly.
 - In this project, I use MongoDB as a primary database for each service. It might also make sense to have a polyglot persistence architecture (сhoose the type of db that is best suited to service requirements).
 - Service-to-service communication is quite simplified: microservices talking using only synchronous REST API. Common practice in a real-world systems is to use combination of interaction styles. For example, perform synchronous GET request to retrieve data and use asynchronous approach via Message broker for create/update operations in order to decouple services and buffer messages. However, this brings us to the [eventual consistency](http://martinfowler.com/articles/microservice-trade-offs.html#consistency) world.
 
@@ -61,7 +59,7 @@ There's a bunch of common patterns in distributed systems, which could help us t
 ### Config service
 [Spring Cloud Config](http://cloud.spring.io/spring-cloud-config/spring-cloud-config.html) is horizontally scalable centralized configuration service for distributed systems. It uses a pluggable repository layer that currently supports local storage, Git, and Subversion. 
 
-In this project, I use `native profile`, which simply loads config files from the local classpath. You can see `shared` directory in [Config service resources](https://github.com/sqshq/PiggyMetrics/tree/master/config/src/main/resources). Now, when Notification-service requests it's configuration, Config service responses with `shared/notification-service.yml` and `shared/application.yml` (which is shared between all client applications).
+In this project, I use `native profile`, which simply loads config files from the local classpath. You can see `shared` directory in [Config service resources](https://github.com/sqshq/PiggyMetrics/tree/master/config/src/main/resources). Now, when Notification-service requests its configuration, Config service responses with `shared/notification-service.yml` and `shared/application.yml` (which is shared between all client applications).
 
 ##### Client side usage
 Just build Spring Boot application with `spring-cloud-starter-config` dependency, autoconfiguration will do the rest.
@@ -112,7 +110,7 @@ public List<DataPoint> getStatisticsByAccountName(@PathVariable String name) {
 ### API Gateway
 As you can see, there are three core services, which expose external API to client. In a real-world systems, this number can grow very quickly as well as whole system complexity. Actually, hundreds of services might be involved in rendering of one complex webpage.
 
-In theory, a client could make requests to each of the microservices directly. But obviously, there are challenges and limitations with this option, like necessity to know all endpoints addresses, perform http request for each peace of information separately, merge the result on a client side. Another problem is non web-friendly protocols which might be used on the backend.
+In theory, a client could make requests to each of the microservices directly. But obviously, there are challenges and limitations with this option, like necessity to know all endpoints addresses, perform http request for each piece of information separately, merge the result on a client side. Another problem is non web-friendly protocols which might be used on the backend.
 
 Usually a much better approach is to use API Gateway. It is a single entry point into the system, used to handle requests by routing them to the appropriate backend service or by invoking multiple backend services and [aggregating the results](http://techblog.netflix.com/2013/01/optimizing-netflix-api.html). Also, it can be used for authentication, insights, stress and canary testing, service migration, static response handling, active traffic management.
 
@@ -147,7 +145,7 @@ spring:
 
 Now, on application startup, it will register with Eureka Server and provide meta-data, such as host and port, health indicator URL, home page etc. Eureka receives heartbeat messages from each instance belonging to a service. If the heartbeat fails over a configurable timetable, the instance will be removed from the registry.
 
-Also, Eureka provides a simple interface, where you can track running services and number of available instances: `http://localhost:8761`
+Also, Eureka provides a simple interface, where you can track running services and a number of available instances: `http://localhost:8761`
 
 ### Load balancer, Circuit breaker and Http client
 
@@ -186,7 +184,7 @@ public interface StatisticsServiceClient {
 
 ### Monitor dashboard
 
-In this project configuration, each microservice with Hystrix on board pushes metrics to Turbine via Spring Cloud Bus (with AMQP broker). The Monitoring project is just a small Spring boot application with [Turbine](https://github.com/Netflix/Turbine) and [Hystrix Dashboard](https://github.com/Netflix/Hystrix/tree/master/hystrix-dashboard).
+In this project configuration, each microservice with Hystrix on board pushes metrics to Turbine via Spring Cloud Bus (with AMQP broker). The Monitoring project is just a small Spring boot application with [Turbine](https://github.com/Netflix/Turbine) and [Hystrix Dashboard](https://github.com/Netflix-Skunkworks/hystrix-dashboard).
 
 See below [how to get it up and running](https://github.com/sqshq/PiggyMetrics#how-to-run-all-the-things).
 
@@ -203,6 +201,24 @@ Let's see our system behavior under load: Account service calls Statistics servi
 
 Centralized logging can be very useful when attempting to identify problems in a distributed environment. Elasticsearch, Logstash and Kibana stack lets you search and analyze your logs, utilization and network activity data with ease.
 Ready-to-go Docker configuration described [in my other project](http://github.com/sqshq/ELK-docker).
+
+### Distributed tracing
+
+Analyzing problems in distributed systems can be difficult, for example, tracing requests that propagate from one microservice to another. It can be quite a challenge to try to find out how a request travels through the system, especially if you don't have any insight into the implementation of a microservice. Even when there is logging, it is hard to tell which action correlates to a single request.
+
+[Spring Cloud Sleuth](https://cloud.spring.io/spring-cloud-sleuth/) solves this problem by providing support for distributed tracing. It adds two types of IDs to the logging: traceId and spanId. The spanId represents a basic unit of work, for example sending an HTTP request. The traceId contains a set of spans forming a tree-like structure. For example, with a distributed big-data store, a trace might be formed by a PUT request. Using traceId and spanId for each operation we know when and where our application is as it processes a request, making reading our logs much easier. 
+
+The logs are as follows, notice the `[appname,traceId,spanId,exportable]` entries from the Slf4J MDC:
+
+```text
+2018-07-26 23:13:49.381  WARN [gateway,3216d0de1384bb4f,3216d0de1384bb4f,false] 2999 --- [nio-4000-exec-1] o.s.c.n.z.f.r.s.AbstractRibbonCommand    : The Hystrix timeout of 20000ms for the command account-service is set lower than the combination of the Ribbon read and connect timeout, 80000ms.
+2018-07-26 23:13:49.562  INFO [account-service,3216d0de1384bb4f,404ff09c5cf91d2e,false] 3079 --- [nio-6000-exec-1] c.p.account.service.AccountServiceImpl   : new account has been created: test
+```
+
+- *`appname`*: The name of the application that logged the span from the property `spring.application.name`
+- *`traceId`*: This is an ID that is assigned to a single request, job, or action
+- *`spanId`*: The ID of a specific operation that took place
+- *`exportable`*: Whether the log should be exported to [Zipkin](https://zipkin.io/)
 
 ## Security
 
@@ -228,7 +244,7 @@ Keep in mind, that you are going to start 8 Spring Boot applications, 4 MongoDB 
 
 #### Before you start
 - Install Docker and Docker Compose.
-- Export environment variables: `CONFIG_SERVICE_PASSWORD`, `NOTIFICATION_SERVICE_PASSWORD`, `STATISTICS_SERVICE_PASSWORD`, `ACCOUNT_SERVICE_PASSWORD`, `MONGODB_PASSWORD` (make sure they were exported: `printenv`)
+- Change environment variable values in `.env` file for more security or leave it as it is.
 - Make sure to build the project: `mvn package [-DskipTests]`
 
 #### Production mode
@@ -240,11 +256,12 @@ If you'd like to build images yourself (with some changes in the code, for examp
 
 `docker-compose.dev.yml` inherits `docker-compose.yml` with additional possibility to build images locally and expose all containers ports for convenient development.
 
+If you'd like to start applications in Intellij Idea you need to either use [EnvFile plugin](https://plugins.jetbrains.com/plugin/7861-envfile) or manually export environment variables listed in `.env` file (make sure they were exported: `printenv`)
+
 #### Important endpoints
 - http://localhost:80 - Gateway
 - http://localhost:8761 - Eureka Dashboard
-- http://localhost:9000/hystrix - Hystrix Dashboard (paste Turbine stream link on the form)
-- http://localhost:8989 - Turbine stream (source for the Hystrix Dashboard)
+- http://localhost:9000/hystrix - Hystrix Dashboard (Turbine stream link: `http://turbine-stream-service:8080/turbine/turbine.stream`)
 - http://localhost:15672 - RabbitMq management (default login/password: guest/guest)
 
 #### Notes
@@ -252,6 +269,6 @@ All Spring Boot applications require already running [Config Server](https://git
 
 Also, Service Discovery mechanism needs some time after all applications startup. Any service is not available for discovery by clients until the instance, the Eureka server and the client all have the same metadata in their local cache, so it could take 3 heartbeats. Default heartbeat period is 30 seconds.
 
-## Feedback welcome
+## Contributions are welcome!
 
-PiggyMetrics is open source, and would greatly appreciate your help. Feel free to contact me with any questions.
+PiggyMetrics is open source, and would greatly appreciate your help. Feel free to suggest and implement improvements.
